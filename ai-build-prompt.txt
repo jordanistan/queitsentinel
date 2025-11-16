@@ -1,0 +1,443 @@
+Prompt for Software Engineer – Local “Report Card” Dashboard (Containerized)
+
+Project Title (placeholder):
+Local Usage Report Card Dashboard for Child’s Ubuntu Laptop
+
+The goal: Build a lightweight, privacy-respecting monitoring system that runs entirely inside Docker containers on a child’s Ubuntu laptop, and exposes a local-only web dashboard for parents on the same home network.
+
+The child knows this monitoring exists, and agreed as a condition of using the gifted laptop. The purpose is safety and healthy usage, not covert spying.
+
+1. Functional Requirements
+
+Data Collection (Aggregated Only)
+
+Track screen time for the child’s Ubuntu user:
+
+Total active time per day.
+
+Active time per hour (timeline view).
+
+Track app usage:
+
+Which application window is in the foreground.
+
+Aggregate total time per app per day/week.
+
+Track web usage at domain level (not full URLs):
+
+e.g., youtube.com: 1h 20m, classroom.google.com: 45m, discord.com: 30m.
+
+Do not store full URLs, query strings, or page content.
+
+Track login sessions:
+
+Login and logout times for the child’s user.
+
+Distinguish between “normal hours” (e.g., 6am–10pm) and “late-night” usage.
+
+Categorization
+
+Classify apps/domains into categories:
+
+Education / School
+
+Entertainment / Games / Streaming
+
+Social / Chat
+
+General / Other
+
+Use a simple, editable config file (YAML or JSON) for mappings:
+
+Domains → categories
+
+Executables/process names → categories
+
+“Report Card” Web Dashboard
+
+The system exposes a web dashboard from a container on the laptop, reachable at:
+
+http://<laptop_LAN_IP>:8080 (port configurable).
+
+Views:
+
+Today’s Summary
+
+Total active screen time today.
+
+Time per category (pie/bar chart).
+
+Top 5 apps / domains by time.
+
+Late-night usage flag + total minutes during “off-limits” hours.
+
+Last 7 Days
+
+Daily total usage graph (bar/line).
+
+Average time per category for the week.
+
+Report Card / Status Tile
+
+Simple Green / Yellow / Red (or A–F) rating derived from rules:
+
+e.g., >X hours total or >Y minutes late-night → Red.
+
+UI must be parent-friendly (plain English labels, no dev jargon).
+
+Access Control
+
+Dashboard only accessible:
+
+On the local home network (no public internet exposure).
+
+With parent login (basic auth or simple login form).
+
+All data remains local on the laptop by default (no cloud sync).
+
+Explicit Non-Goals (to avoid spyware territory)
+
+No keylogging.
+
+No capturing message/chat contents.
+
+No microphone or webcam access.
+
+No secret screen recording.
+
+The system should be clearly a usage monitor, not covert surveillance.
+
+2. Non-Functional Requirements
+
+Lightweight & Unobtrusive
+
+Minimize CPU and RAM overhead; target a MacBook Air running Ubuntu.
+
+Sampling interval for active window / app can be ~2–5 seconds, configurable.
+
+No pop-up spam. The child should know monitoring exists (see transparency section), but normal use should not be interrupted.
+
+Robust Against Child Disabling It
+
+The monitoring stack must run under a different Linux user than the child:
+
+Example: host user jordan or guardian.
+
+The child’s account:
+
+Is a non-sudo standard user.
+
+Must not be in the docker group.
+
+The child must not be able to:
+
+Stop Docker services.
+
+Stop or reconfigure systemd units that manage the container(s).
+
+If she simply powers off, logs out, or closes the lid, usage just stops being recorded — that’s normal.
+
+Security
+
+Web server binds to 0.0.0.0:<port> inside the container, but:
+
+It should only be accessible from the LAN (no router port-forwarding by default).
+
+Use at least:
+
+HTTP basic auth or a simple password login for parents.
+
+Hashed + salted password storage.
+
+Provide config option for changing port and credentials.
+
+Data Persistence
+
+Use SQLite for persistent storage inside a Docker volume or bind-mounted host directory.
+
+Proposed schema (flexible, but something like):
+
+events:
+
+id
+
+timestamp_start
+
+timestamp_end
+
+user (child’s username)
+
+event_type (app, domain, session)
+
+value (app name or domain)
+
+category
+
+settings / thresholds (optional):
+
+Daily time limits, late-night window, etc.
+
+Default retention: 90 days, configurable.
+
+3. Architecture & Containerization Requirements
+
+Important: All application logic (collectors, API, web UI) must run in Docker containers. The only host-level requirements should be:
+
+Docker Engine (or Podman-compatible).
+
+A non-child Linux user that owns/controls the containers.
+
+Systemd units to start containers on boot.
+
+3.1 Components (All Containerized)
+
+Collector Service (Container A)
+
+Responsible for:
+
+Sampling active window / app.
+
+Receiving domain events from browser extensions or reading browser history APIs where possible.
+
+Detecting idle time.
+
+Detecting login/logout or session status (via host APIs or mounted sockets).
+
+Writes aggregated events into SQLite (volume-mounted shared DB).
+
+May need:
+
+Access to host display/session info (X11/Wayland). Acceptable solutions:
+
+Mount relevant sockets or use host network / IPC as needed.
+
+The engineer can decide the safest practical approach.
+
+Runs under a non-root user inside the container (e.g., collectoruser).
+
+API + Dashboard Service (Container B)
+
+Backend (e.g., FastAPI, Flask, Node/Express) that:
+
+Exposes REST or GraphQL endpoints for:
+
+Daily summary.
+
+Weekly summary.
+
+Top apps / domains.
+
+Settings/thresholds.
+
+Reads from the same SQLite DB volume.
+
+Frontend:
+
+Could be a small React/Vue app or server-rendered HTML.
+
+Provides the “Report Card” UI.
+
+Exposes port 8080 (or configurable) to the host.
+
+Auth:
+
+Basic auth or session-based login for parents.
+
+Containers A and B can be merged into a single container if simpler, as long as the separation of concerns is clear. The key is: all app logic runs in containers, not as stray host binaries.
+
+3.2 Host-Level Setup (Outside Containers)
+
+Create a Linux user for running and owning monitoring containers, e.g. guardian:
+
+Add guardian to docker group if needed.
+
+Child’s user must not have permissions to manage Docker or systemd services.
+
+Provide systemd unit files to:
+
+Pull/build images.
+
+Start containers at boot.
+
+Restart on failure.
+
+Example (rough idea, not exact code):
+
+[Unit]
+Description=Usage Report Card Stack
+After=docker.service
+Requires=docker.service
+
+[Service]
+User=guardian
+Restart=always
+ExecStart=/usr/bin/docker compose -f /opt/usage-report/docker-compose.yml up
+ExecStop=/usr/bin/docker compose -f /opt/usage-report/docker-compose.yml down
+
+[Install]
+WantedBy=multi-user.target
+
+
+Engineer can choose between:
+
+Single Dockerfile + docker-compose.yml with multiple services.
+
+Or multiple Dockerfiles orchestrated via Compose.
+
+4. Data Collection Details (Containerized Context)
+
+Active Window / App Tracking
+
+The collector container must be able to query:
+
+Which window is currently active (for the child’s session).
+
+Application name / process name.
+
+This might involve:
+
+Mounting X11 / Wayland sockets.
+
+Using host utilities via bind mounts or minimal host tools.
+
+Sampling interval: configurable (e.g., 2–5 seconds).
+
+Store events in SQLite with:
+
+Start + end timestamps.
+
+App identifier.
+
+Mapped category.
+
+Idle Detection
+
+Detect when no input has occurred for N seconds.
+
+Stop accruing time once idle is detected.
+
+Optionally record AFK periods for completeness.
+
+Domain Tracking
+
+Recommended approach:
+
+Browser extension(s) installed on the child’s browser(s) that:
+
+Extract active tab’s domain only.
+
+POST to a local HTTP endpoint exposed by Collector Service (Container A).
+
+Collector:
+
+Maps domain → category via config file.
+
+Stores events with durations (similar to active window).
+
+Login/Logout
+
+Track start/end of the child’s Linux session.
+
+Acceptable implementation left to engineer (e.g., polling who, log parsing, DBus).
+
+5. Web UI / Report Card Design
+
+Views:
+
+Today
+
+Card: total screen time today.
+
+Card: total time in each category.
+
+Card: late-night usage (minutes + simple “OK / Not OK”).
+
+Table: Top 5 apps and Top 5 domains by time.
+
+Big “status” tile: Green/Yellow/Red with short explanation.
+
+Last 7 Days
+
+Chart: total screen time per day.
+
+Chart: stacked bar per category (if feasible).
+
+Average time in each category.
+
+Settings (parents-only)
+
+Change thresholds:
+
+Daily max total time.
+
+Max entertainment time.
+
+Max late-night minutes.
+
+View/edit category mappings via a simple UI or link to config file instructions.
+
+6. Transparency for the Child
+
+Even though containers are owned by a different user and are not easily stoppable by the child:
+
+Provide a visible indicator/entry in the child’s environment, e.g.:
+
+A launcher called “Usage Report Info” that opens a static local HTML page explaining:
+
+What is tracked (apps, domains, times).
+
+What is not tracked (no message contents, no passwords, no screenshots).
+
+That parents can see a summary dashboard for safety and balance.
+
+This page can be served by the dashboard container or just a static file.
+
+7. Deliverables
+
+Source Code
+
+Collector service (Container A).
+
+API + Dashboard (Container B or combined).
+
+Config files (categories, thresholds, auth).
+
+Docker Files / Compose
+
+Dockerfile(s).
+
+docker-compose.yml (or equivalent) that:
+
+Defines services.
+
+Configures volumes for SQLite data and config.
+
+Sets ports and environment variables.
+
+Instructions to run:
+
+docker compose up -d (or similar).
+
+Host Setup Scripts
+
+Script to:
+
+Create guardian user.
+
+Install Docker if needed.
+
+Install systemd unit(s).
+
+Documentation for placing the Compose file and starting at boot.
+
+Documentation
+
+README covering:
+
+Fresh install steps on Ubuntu.
+
+How parents reach the dashboard (e.g., http://192.168.1.25:8080).
+
+How to change thresholds and credentials.
+
+What data is collected and how long it’s kept.

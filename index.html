@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>QuietSentinel</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .report-card {
+            font-size: 2rem;
+            font-weight: bold;
+            padding: 20px;
+            text-align: center;
+            border-radius: 10px;
+        }
+        .report-card.green {
+            background-color: #28a745;
+            color: white;
+        }
+        .report-card.yellow {
+            background-color: #ffc107;
+            color: black;
+        }
+        .report-card.red {
+            background-color: #dc3545;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mt-4">QuietSentinel</h1>
+
+        <div class="row">
+            <div class="col-md-4">
+                <div id="report-card" class="report-card">
+                    Loading...
+                </div>
+            </div>
+            <div class="col-md-8">
+                <canvas id="category-chart"></canvas>
+            </div>
+        </div>
+
+        <h2 class="mt-4">Events</h2>
+        <table id="events-table" class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Start Time</th>
+                    <th>End Time</th>
+                    <th>Type</th>
+                    <th>Value</th>
+                    <th>Category</th>
+                </tr>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        function fetchData() {
+            fetch('data/events.log')
+                .then(response => response.text())
+                .then(text => {
+                    const lines = text.trim().split('\n');
+                    const events = lines.map(line => JSON.parse(line));
+
+                    updateTable(events);
+                    updateReportCard(events);
+                    updateCategoryChart(events);
+                });
+        }
+
+        function updateTable(events) {
+            const tableBody = document.querySelector('#events-table tbody');
+            tableBody.innerHTML = '';
+            events.forEach(event => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${new Date(event.timestamp_start * 1000).toLocaleString()}</td>
+                    <td>${new Date(event.timestamp_end * 1000).toLocaleString()}</td>
+                    <td>${event.event_type}</td>
+                    <td>${event.value}</td>
+                    <td>${event.category}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        function updateReportCard(events) {
+            const reportCard = document.getElementById('report-card');
+            const totalTime = events.reduce((total, event) => total + (event.timestamp_end - event.timestamp_start), 0);
+            const entertainmentTime = events
+                .filter(event => event.category === 'Entertainment / Games / Streaming')
+                .reduce((total, event) => total + (event.timestamp_end - event.timestamp_start), 0);
+
+            let status = 'green';
+            let statusText = 'Good';
+
+            if (totalTime > 3600 || entertainmentTime > 1800) {
+                status = 'yellow';
+                statusText = 'Warning';
+            }
+            if (totalTime > 7200 || entertainmentTime > 3600) {
+                status = 'red';
+                statusText = 'Alert';
+            }
+
+            reportCard.className = `report-card ${status}`;
+            reportCard.textContent = statusText;
+        }
+
+        let categoryChart = null;
+        function updateCategoryChart(events) {
+            const categoryData = {};
+            events.forEach(event => {
+                const duration = event.timestamp_end - event.timestamp_start;
+                if (categoryData[event.category]) {
+                    categoryData[event.category] += duration;
+                } else {
+                    categoryData[event.category] = duration;
+                }
+            });
+
+            const ctx = document.getElementById('category-chart').getContext('2d');
+            if (categoryChart) {
+                categoryChart.destroy();
+            }
+            categoryChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: Object.keys(categoryData),
+                    datasets: [{
+                        data: Object.values(categoryData),
+                        backgroundColor: [
+                            'rgba(255, 99, 132, 0.7)',
+                            'rgba(54, 162, 235, 0.7)',
+                            'rgba(255, 206, 86, 0.7)',
+                            'rgba(75, 192, 192, 0.7)',
+                            'rgba(153, 102, 255, 0.7)',
+                            'rgba(255, 159, 64, 0.7)'
+                        ]
+                    }]
+                }
+            });
+        }
+
+        fetchData();
+        setInterval(fetchData, 10000);
+    </script>
+</body>
+</html>

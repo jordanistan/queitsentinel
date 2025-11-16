@@ -1,0 +1,3 @@
+{"timestamp_start": 1678886400, "timestamp_end": 1678886460, "event_type": "app", "value": "Google Chrome", "category": "Education / School"}
+{"timestamp_start": 1678886460, "timestamp_end": 1678886520, "event_type": "app", "value": "Visual Studio Code", "category": "Education / School"}
+{"timestamp_start": 1678886520, "timestamp_end": 1678886580, "event_type": "app", "value": "vlc", "category": "Entertainment / Games / Streaming"}
