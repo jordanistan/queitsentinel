@@ -48,6 +48,7 @@
                     <th>End Time</th>
                     <th>Type</th>
                     <th>Value</th>
+                    <th>Window Title</th>
                     <th>Category</th>
                 </tr>
             </thead>
@@ -81,6 +82,7 @@
                     <td>${new Date(event.timestamp_end * 1000).toLocaleString()}</td>
                     <td>${event.event_type}</td>
                     <td>${event.value}</td>
+                    <td>${event.window_title || ''}</td>
                     <td>${event.category}</td>
                 `;
                 tableBody.appendChild(row);
