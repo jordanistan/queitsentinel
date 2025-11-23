@@ -64,6 +64,14 @@
                 </ul>
             </div>
         </div>
+
+        <div class="row">
+            <div class="col-md-12">
+                <h2 class="mt-4">All Visited Domains</h2>
+                <ul id="all-domains" class="list-group">
+                </ul>
+            </div>
+        </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -79,6 +87,7 @@
                     updateReportCard(events);
                     updateCategoryChart(events);
                     updateTopWebsites(events);
+                    updateAllVisitedDomains(events);
                 });
         }
 
@@ -186,6 +195,35 @@
                 listItem.appendChild(badge);
                 topWebsitesList.appendChild(listItem);
             });
+        }
+
+        function updateAllVisitedDomains(events) {
+            const domainData = {};
+            events
+                .filter(event => event.event_type === 'domain')
+                .forEach(event => {
+                    const duration = event.timestamp_end - event.timestamp_start;
+                    if (domainData[event.value]) {
+                        domainData[event.value] += duration;
+                    } else {
+                        domainData[event.value] = duration;
+                    }
+                });
+
+            const allDomainsList = document.getElementById('all-domains');
+            allDomainsList.innerHTML = '';
+            Object.entries(domainData)
+                .sort(([, a], [, b]) => b - a) // Sort by duration, descending
+                .forEach(([domain, duration]) => {
+                    const listItem = document.createElement('li');
+                    listItem.className = 'list-group-item d-flex justify-content-between align-items-center';
+                    listItem.textContent = domain;
+                    const badge = document.createElement('span');
+                    badge.className = 'badge bg-secondary rounded-pill';
+                    badge.textContent = `${Math.round(duration / 60)} min`;
+                    listItem.appendChild(badge);
+                    allDomainsList.appendChild(listItem);
+                });
         }
 
         fetchData();
